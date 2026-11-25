@@ -1,0 +1,9 @@
+# Enviroment variables
+.env
+.env.*
+!.env.example
+
+# virtual Environment
+.venv/
+venv/
+env/
