@@ -3,7 +3,11 @@
 .env.*
 !.env.example
 
-# virtual Environment
+# Virtual Environment
 .venv/
 venv/
 env/
+
+# Python Cache
+__pycache__/
+*.py[cod]
