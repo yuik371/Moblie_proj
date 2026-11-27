@@ -1,11 +1,10 @@
-from datetime import datetime, timezone
-from itertools import count
-from threading import Lock
-
-from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
+from app.db.session import get_db
+from app.models.post import Post
 from app.schemas.post import PostCreate, PostResponse, PostUpdate
 
 
@@ -13,13 +12,6 @@ router = APIRouter(
     prefix="/posts",
     tags=["게시물"],
 )
-
-# 임시 게시물 저장소
-posts: dict[int, PostResponse] = {}
-
-# 게시물 번호와 동시 등록 처리용 잠금
-post_ids = count(1)
-posts_lock = Lock()
 
 
 @router.post(
@@ -30,23 +22,21 @@ posts_lock = Lock()
 def create_post(
     request: PostCreate,
     current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    """로그인한 사용자가 게시물을 등록합니다."""
+    """로그인한 사용자의 게시물을 DB에 저장합니다."""
 
-    with posts_lock:
-        post_id = next(post_ids)
+    post = Post(
+        **request.model_dump(),
+        seller_id=current_user["id"],
+        seller_nickname=current_user["nickname"],
+        status="판매중",
+        analysis_status="분석대기",
+    )
 
-        post = PostResponse(
-            **request.model_dump(),
-            id=post_id,
-            # 작성자 정보는 로그인 토큰으로 확인합니다.
-            seller_id=current_user["id"],
-            seller_nickname=current_user["nickname"],
-            status="판매중",
-            created_at=datetime.now(timezone.utc),
-        )
-
-        posts[post_id] = post
+    db.add(post)
+    db.commit()
+    db.refresh(post)
 
     return post
 
@@ -56,51 +46,42 @@ def get_posts(
     keyword: str | None = Query(default=None, max_length=100),
     region: str | None = Query(default=None, max_length=100),
     category: str | None = Query(default=None, max_length=50),
+    db: Session = Depends(get_db),
 ):
-    """검색 조건에 맞는 게시물을 최신순으로 조회합니다."""
+    """조건에 맞는 게시물을 DB에서 최신순으로 조회합니다."""
 
-    with posts_lock:
-        result = list(posts.values())
+    query = select(Post)
 
-    # 제목 또는 설명에 검색어가 포함된 게시물을 찾습니다.
+    # 제목 또는 설명에서 검색합니다.
     if keyword and keyword.strip():
-        search_word = keyword.strip().casefold()
-        result = [
-            post
-            for post in result
-            if search_word in post.title.casefold()
-            or search_word in post.description.casefold()
-        ]
+        search_word = keyword.strip()
 
-    # 지역이 일치하는 게시물을 찾습니다.
+        query = query.where(
+            or_(
+                Post.title.contains(search_word, autoescape=True),
+                Post.description.contains(search_word, autoescape=True),
+            )
+        )
+
     if region and region.strip():
-        result = [
-            post
-            for post in result
-            if post.region == region.strip()
-        ]
+        query = query.where(Post.region == region.strip())
 
-    # 카테고리가 일치하는 게시물을 찾습니다.
     if category and category.strip():
-        result = [
-            post
-            for post in result
-            if post.category == category.strip()
-        ]
+        query = query.where(Post.category == category.strip())
 
-    return sorted(
-        result,
-        key=lambda post: post.id,
-        reverse=True,
-    )
+    query = query.order_by(Post.id.desc())
+
+    return db.scalars(query).all()
 
 
 @router.get("/{post_id}", response_model=PostResponse)
-def get_post(post_id: int):
-    """게시물 번호로 상세 내용을 조회합니다."""
+def get_post(
+    post_id: int,
+    db: Session = Depends(get_db),
+):
+    """게시물 상세 내용을 조회합니다."""
 
-    with posts_lock:
-        post = posts.get(post_id)
+    post = db.get(Post, post_id)
 
     if post is None:
         raise HTTPException(
@@ -110,68 +91,68 @@ def get_post(post_id: int):
 
     return post
 
+
 @router.put("/{post_id}", response_model=PostResponse)
 def update_post(
     post_id: int,
     request: PostUpdate,
     current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """작성자만 게시물을 수정할 수 있습니다."""
 
-    with posts_lock:
-        post = posts.get(post_id)
+    post = db.get(Post, post_id)
 
-        if post is None:
-            raise HTTPException(
-                status_code=404,
-                detail="게시물을 찾을 수 없습니다.",
-            )
+    if post is None:
+        raise HTTPException(
+            status_code=404,
+            detail="게시물을 찾을 수 없습니다.",
+        )
 
-        # 로그인한 사용자와 게시물 작성자를 비교합니다.
-        if post.seller_id != current_user["id"]:
-            raise HTTPException(
-                status_code=403,
-                detail="본인이 작성한 게시물만 수정할 수 있습니다.",
-            )
+    if post.seller_id != current_user["id"]:
+        raise HTTPException(
+            status_code=403,
+            detail="본인이 작성한 게시물만 수정할 수 있습니다.",
+        )
 
-        # 기존 작성자·등록일·AI 결과는 유지합니다.
-        updated_data = post.model_dump()
-        updated_data.update(request.model_dump())
+    # 사진이 바뀌면 이전 AI 분석 결과를 초기화합니다.
+    if request.image_urls != post.image_urls:
+        post.ai_recommended_price = None
+        post.analysis_status = "분석대기"
 
-        # 사진이 바뀌면 기존 AI 분석 결과를 초기화합니다.
-        if request.image_urls != post.image_urls:
-            updated_data["ai_recommended_price"] = None
-            updated_data["analysis_status"] = "분석대기"
+    # 수정 가능한 필드만 반영합니다.
+    for field, value in request.model_dump().items():
+        setattr(post, field, value)
 
-        updated_post = PostResponse(**updated_data)
-        posts[post_id] = updated_post
+    db.commit()
+    db.refresh(post)
 
-    return updated_post
+    return post
+
 
 @router.delete("/{post_id}")
 def delete_post(
     post_id: int,
     current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """작성자만 게시물을 삭제할 수 있습니다."""
 
-    with posts_lock:
-        post = posts.get(post_id)
+    post = db.get(Post, post_id)
 
-        if post is None:
-            raise HTTPException(
-                status_code=404,
-                detail="게시물을 찾을 수 없습니다.",
-            )
+    if post is None:
+        raise HTTPException(
+            status_code=404,
+            detail="게시물을 찾을 수 없습니다.",
+        )
 
-        if post.seller_id != current_user["id"]:
-            raise HTTPException(
-                status_code=403,
-                detail="본인이 작성한 게시물만 삭제할 수 있습니다.",
-            )
+    if post.seller_id != current_user["id"]:
+        raise HTTPException(
+            status_code=403,
+            detail="본인이 작성한 게시물만 삭제할 수 있습니다.",
+        )
 
-        # 게시물 정보만 삭제합니다.
-        # 사진 원본 삭제는 업로드 담당 기능과 연결할 때 처리합니다.
-        del posts[post_id]
+    db.delete(post)
+    db.commit()
 
     return {"message": "게시물이 삭제되었습니다."}

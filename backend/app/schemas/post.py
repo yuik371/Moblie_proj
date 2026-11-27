@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # 사용자가 게시물을 등록할 때 입력하는 정보
@@ -20,6 +20,8 @@ class PostCreate(BaseModel):
 
 # 게시물 조회 시 서버가 보내는 정보
 class PostResponse(PostCreate):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     seller_id: int
     seller_nickname: str
