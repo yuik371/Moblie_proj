@@ -1,165 +1,273 @@
-# AI & AR 기반 차세대 중고거래 플랫롭
-2026-하반기 모바일프로그래밍 프로젝트 (작성자: 유익)
+# AI & AR 기반 중고거래 플랫폼
 
-Flutter와 Dart를 활용하여 구현한 당근마켓 스타일의 모바일 중고거래 플랫폼입니다. 상품 탐색, 상품 상세 확인, 채팅, 동네 설정, 상품 등록, 로그인 OTP 화면과 센서 기반 AR 스타일 상품 미리보기 흐름을 하나의 모바일 앱에서 경험할 수 있도록 구성했습니다. 현재 프로젝트는 학습 오프라인 데모 기준으로 합니다. 실제 회원 인증, 서버 통신, 결제, 카메라 촬영 및 ARCore/ARKit 연동은 포함 될 예정이며, 일부 기능은 임시 데이터와 상태로 동작입니다
-## 1. 프로젝트 개요
-- Flutter 위젯 기반 모바일 UI 구성 연습
-- 중고거래 서비스의 주요 사용자 흐름 구현
-- 화면과 상태를 기능별 파일로 분리하는 구조 학습
-- 기기 센서 데이터를 활용한 AR 스타일 인터렉션 구현
-### 사용자 흐름
-```
-학슴 상품 목록
-↓
-상품 상세 확인
-    ├── AR로 보기
-    └── 채팅하기
+2026년 하반기 모바일프로그래밍 팀 프로젝트  
+팀원: 유익, 임태진, 김가빈, 박상우
 
-나의 당근
-    ├── 로그인 / 회원가입
-    └── 앱 설정
+Flutter와 FastAPI를 활용한 중고거래 앱입니다.
 
-상품 작성
-    └── 작성 완료 → 홈 목록에 새 상품 추가
-```
+사용자가 등록한 상품을 목록과 상세 화면에서 확인하고, 검색·수정·삭제할 수 있습니다. 이메일 인증과 회원가입·로그인을 지원하며, 회원정보와 게시물은 SQLite에 저장합니다.
 
-## 2. 주요 특징
-### 중고거래 기본 기능
-- 우리 동네 인기 매물 목록
-- 상품 이미지 ·제목·위치·등록 시간·가격 표시
-- 상품 상세 정보와 거래 희망 장소 표시
-- 상품 검색 화면과 추천 검색어 UI
-- 상품 등록 화면과 임시 상품 추가 기능
+향후 상품 사진 업로드, AI 결함 탐지와 추천가격 산정, 실제 공간에 상품을 배치하는 AR 기능을 연결할 예정입니다.
 
-### 사용자 및 거래 기능
-- 하단 네비게이션을 통한 홈·검색·채팅·나의 당근 이동
-- 채팅방 목록과 채팅 상세 화면
-- 샘플 메시지 전송 상태 반영
-- 로그인·회원가입 및 OTP 인증 화면 흐름
-- 동네 설정과 앱 설정 화면
+## 1. 기술 구성
 
-### AR 스타일 기능
-- 상품 상세 화면에서 AR 미리보기 화면으로 이동
-- `sensors_plus`를 활용한 가속도 센서 이벤트 수신
-- 휴대폰 기울기에 따른 상품 카드 이동·회전
-- 센서를 사용할 수 없을 때 반복 애니메이션으로 대체
-- Canvas 기반 AR 격자와 조준선 렌더링
+| 구분             | 기술                        | 용도                                |
+| ---------------- | --------------------------- | ----------------------------------- |
+| 모바일 앱        | Flutter, Dart               | 화면 및 사용자 인터랙션             |
+| 서버             | FastAPI, Python             | 인증 및 게시물 API                  |
+| 데이터베이스     | SQLite, SQLAlchemy          | 회원·게시물 저장                    |
+| 임시 인증 데이터 | Redis                       | 인증번호 및 인증 완료 기록 저장     |
+| 이메일           | 네이버 SMTP                 | 이메일 인증번호 발송                |
+| 로그인 인증      | JWT                         | 로그인 사용자 및 게시물 작성자 확인 |
+| 비밀번호         | pwdlib, Argon2              | 비밀번호 해싱                       |
+| 앱 통신          | http                        | Flutter와 FastAPI 연결              |
+| AR 스타일 데모   | sensors_plus, CustomPainter | 센서 기반 움직임 및 배경 렌더링     |
 
-## 3. 프로젝트 아키텍처 및 워크플로우 
-앱은 화면, 상태, 모델, 공통 위젯, 외부 센서 서비스를 분리하는 구조로 구성했습니다.
-```mermaid
-flowchart TD
-    A[Flutter App] --> B[KarrotShell]
-    B --> C[AppState]
-    B --> D[Screen Widgets]
-    C --> E[Listing Model]
-    D --> F[Reusable Widgets]
-    D --> G[SensorService]
-    G --> H[sensors_plus]
-```
-### 화면 흐름
-### 현재 데이터 처리
+## 2. 현재 구현한 기능
 
-## 4. 디렉터리 구조
+### 이메일 인증 및 회원 기능
+
+- 앱에서 인증번호 이메일 발송
+- 6자리 인증번호 확인
+- 이메일 인증 후 회원가입
+- 이메일 중복 가입 방지
+- 이메일·비밀번호 로그인 및 JWT 발급
+- 회원정보 SQLite 저장
+- 앱 실행 중 로그인 토큰과 회원 번호 공유
+
+인증번호는 5분 동안 유효하며, 같은 이메일의 재발송 간격은 60초입니다. 인증 완료 기록은 최대 1시간 동안 유지되고 회원가입 시 사용됩니다.
+
+### 게시물 기능
+
+- 홈의 `+` 버튼으로 게시물 등록
+- 제목·설명·카테고리·거래 지역 입력
+- 최신순 게시물 목록 및 상세 조회
+- 제목·설명 검색과 서버의 지역·카테고리 필터
+- 작성자의 게시물 수정·삭제
+- 판매 중·예약 중·판매 완료 상태 변경
+- SQLite 저장을 통한 서버 재시작 후 데이터 유지
+- 사진 주소 및 AI 추천가격을 저장할 필드 준비
+
+사진 업로드와 AI 분석은 아직 연결하지 않았습니다. 현재 앱에서 새로 등록한 게시물은 사진 없이 가격 미정으로 저장됩니다. 판매가격은 수정 화면에서 입력할 수 있습니다.
+
+### 기존 데모 화면
+
+채팅, 동네 설정, 앱 설정, 센서 기반 AR 스타일 미리보기 화면이 포함되어 있습니다. 일부 기존 화면은 샘플 데이터로 동작합니다.
+
+현재 서버 게시물 상세 화면에는 채팅·AR 진입 기능이 아직 연결되어 있지 않습니다.
+
+## 3. 사용자 흐름
+
+### 회원가입 및 로그인
+
+나의 당근 → 로그인 / 회원가입 → 회원가입  
+→ 이메일 인증번호 발송 → 인증번호 확인  
+→ 닉네임·비밀번호 입력 → 회원가입 완료 → 로그인
+
+### 게시물 이용
+
+로그인 → 홈의 `+` 버튼 → 상품 정보 입력 → 작성 완료  
+→ 홈 목록 → 상품 상세 → 본인 게시물 수정 또는 삭제
+
+검색 탭에서는 검색어를 입력해 실제 DB의 게시물을 조회할 수 있습니다.
+
+## 4. 프로젝트 구조
+
 ```text
-lib/
-├── config/
-│   └── app_theme.dart             # 앱 공통 색상과 Material 테마
-├── models/
-│   ├── app_screen.dart             # 앱 화면 열거형
-│   └── listing.dart                # 상품 모델과 상품 종류
-├── providers/
-│   └── app_state.dart              # 화면 이동 및 샘플 상태 관리
-├── screens/
-│   ├── karrot_shell.dart            # 앱 화면 라우팅과 하단 네비게이션
-│   ├── home_view.dart               # 홈 상품 목록
-│   ├── search_view.dart             # 검색 화면
-│   ├── article_view.dart            # 상품 상세 화면
-│   ├── chat_view.dart               # 채팅 목록
-│   ├── chat_room_view.dart          # 채팅방 상세
-│   ├── write_view.dart              # 상품 등록
-│   ├── profile_view.dart            # 나의 당근
-│   ├── region_view.dart             # 동네 설정
-│   ├── settings_view.dart           # 앱 설정
-│   ├── login_view.dart              # 로그인·회원가입
-│   ├── otp_view.dart                # OTP 인증
-│   └── ar_preview_view.dart         # 센서 기반 AR 스타일 화면
-├── services/
-│   └── sensor_service.dart          # 가속도 센서 스트림 제공
-└── widgets/
-    ├── listing_tile.dart             # 상품 카드와 상품 일러스트
-    ├── chat_bubble.dart              # 채팅 말풍선
-    ├── profile_tile.dart             # 프로필 메뉴 항목
-    ├── setting_row.dart              # 설정 메뉴 항목
-    ├── form_row.dart                 # 상품 등록 입력 항목
-    └── ar_painters.dart              # AR 격자·조준선 Painter
+Moblie_proj/
+├── lib/
+│   ├── config/                  # 앱 테마
+│   ├── models/
+│   │   ├── listing.dart         # 기존 데모 상품 모델
+│   │   └── post.dart            # 서버 게시물 모델
+│   ├── providers/               # 기존 화면 상태 관리
+│   ├── screens/
+│   │   ├── karrot_shell.dart
+│   │   ├── server_posts_view.dart
+│   │   ├── server_search_view.dart
+│   │   ├── post_detail_view.dart
+│   │   ├── post_edit_view.dart
+│   │   ├── write_view.dart
+│   │   ├── server_login_view.dart
+│   │   ├── server_signup_view.dart
+│   │   └── 기타 데모 화면
+│   ├── services/
+│   │   ├── post_service.dart
+│   │   ├── auth_service.dart
+│   │   ├── auth_session.dart
+│   │   └── sensor_service.dart
+│   └── widgets/                 # 공통 위젯
+├── backend/
+│   ├── app/
+│   │   ├── core/                # 환경 설정·JWT·비밀번호 처리
+│   │   ├── db/
+│   │   │   └── session.py       # SQLite 연결 및 DB 세션
+│   │   ├── models/              # 회원·게시물 테이블
+│   │   ├── routers/             # 인증·사용자·게시물 API
+│   │   ├── schemas/             # 요청·응답 데이터 형식
+│   │   └── main.py
+│   ├── .env.example
+│   └── requirements.txt
+└── pubspec.yaml
 ```
 
-## 5. 설치 및 준비
-### 요구 사항
-- Flutter SDK
-- Dart SDK
-- Android Studio 또는 iOS 개발 환경
-- 가속도 센서를 확인할 수 있는 실제 모바일 기기 또는 에뮬레이터
+## 5. 개발 환경
 
-### 실행 방법
+- macOS
+- VS Code
+- Flutter SDK
+- Python 3.13
+- Redis
+- iOS Simulator 및 Xcode
+
+현재 앱과 서버의 연결은 같은 맥북에서 실행하는 iPhone 시뮬레이터 기준으로 확인했습니다.
+
+## 6. 백엔드 실행
+
+### 가상환경 및 패키지 설치
+
+프로젝트 최상위 폴더의 터미널에서 실행합니다.
+
+```bash
+cd backend
+python3.13 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+### 환경변수 설정
+
+`backend/.env` 파일을 만들고 본인의 설정값을 입력합니다.
+
+```dotenv
+JWT_SECRET_KEY=본인이_생성한_랜덤_비밀키
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+SMTP_SERVER=smtp.naver.com
+SMTP_PORT=465
+SMTP_USER=발신용_네이버_이메일
+SMTP_PASSWORD=네이버_애플리케이션_비밀번호
+
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+```
+
+JWT 비밀키 생성 예시:
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+SMTP에는 메일 발송이 허용된 계정의 애플리케이션 비밀번호를 사용합니다. 실제 비밀번호와 `.env` 파일은 저장소에 올리지 않습니다.
+
+### DB 테이블 생성
+
+`backend` 폴더에서 실행합니다.
+
+```bash
+python -c "from app.db.session import Base, engine; from app.models.user import User; from app.models.post import Post; Base.metadata.create_all(bind=engine)"
+```
+
+`backend/marketplace.db`가 생성됩니다. 기존 테이블이 있으면 유지되며, 이 명령은 기존 테이블의 구조를 변경하지 않습니다.
+
+### Redis 실행
+
+별도 터미널에서 실행합니다.
+
+```bash
+redis-server
+```
+
+연결 확인:
+
+```bash
+redis-cli ping
+```
+
+`PONG`이 나오면 정상입니다.
+
+### FastAPI 실행
+
+가상환경이 활성화된 `backend` 터미널에서 실행합니다.
+
+```bash
+python -m uvicorn app.main:app --reload
+```
+
+API 문서: http://127.0.0.1:8000/docs
+
+## 7. Flutter 실행
+
+프로젝트 최상위 폴더에서 실행합니다.
+
 ```bash
 flutter pub get
+open -a Simulator
+flutter devices
 flutter run
 ```
 
-`pubspec.yaml`에는 Flutter 기본 패키지와 센서 처리를 위한 `sensors_plus` 의존성이 필요합니다.
+기기 선택 화면에서 iPhone 시뮬레이터를 선택합니다.
 
-## 6. 사용 방법
-### 상품 탐색
-1. 홈 화면에서 상품 목록을 확인합니다.
-2. 상품 카드를 누르면 상품 상세 화면으로 이동합니다.
-3. 상세 화면에서 `AR로 보기`를 누르면 상품 미리보기 화면이 열립니다.
-4. `채팅하기`를 누르면 판매자 채팅방으로 이동합니다.
+현재 서버 주소는 `lib/services/post_service.dart`에 설정되어 있습니다.
 
-### 상품 등록
-1. 홈 화면의 `+` 버튼을 누릅니다.
-2. 상품 등록 화면에서 제목·가격·카테고리 입력 영역을 확인합니다.
-3. `작성 완료`를 누르면 샘플 상품이 목록 맨 앞에 추가됩니다.
+```dart
+static const baseUrl = 'http://127.0.0.1:8000';
+```
 
-### 로그인 흐름
-1. `나의 당근` 탭으로 이동합니다.
-2. `로그인 / 회원가입` 버튼을 누릅니다.
-3. 휴대폰 번호 입력 화면에서 `인증번호 받기`를 누릅니다.
-4. OTP 화면에서 `확인`을 누르면 로그인 상태로 전환됩니다.
+이 주소는 같은 맥북에서 실행 중인 iPhone 시뮬레이터 기준입니다. 실제 휴대폰·Android 에뮬레이터·웹에서 실행할 때는 연결 주소와 플랫폼별 네트워크 설정을 조정해야 합니다.
 
-## 7. 소스 파일 상세 설명
-| 파일 | 역할 |
-|---|---|
-| `app_theme.dart` | 앱 전역 색상과 Material 디자인 테마 정의 |
-| `app_screen.dart` | 홈·검색·채팅·프로필·AR 등 화면 상태 정의 |
-| `listing.dart` | 상품명, 위치, 시간, 가격, 카테고리, 찜 상태 보관 |
-| `app_state.dart` | 상품 샘플 데이터, 화면 이동, 로그인 상태 관리 |
-| `karrot_shell.dart` | 화면 라우팅, 뒤로 가기, 하단 네비게이션 관리 |
-| `listing_tile.dart` | 상품 목록 카드와 상품별 Canvas 썸네일 표시 |
-| `ar_preview_view.dart` | 가속도 센서와 애니메이션을 활용한 AR 스타일 UI |
-| `sensor_service.dart` | 가속도 센서 스트림 생성 및 추상화 |
-| `ar_painters.dart` | AR 배경 격자와 중앙 조준선 직접 그리기 |
+## 8. 주요 API
 
-## 8. 현재 구현 범위 및 확장 계획
-현재 구현은 화면 흐름과 사용자 인터랙션을 확인하기 위한 오프라인 프로토타입입니다.
-향후 확장할 기능은 다음과 같습니다.
-- Firebase 또는 Spring Boot 기반 회원 인증
-- 서버 연동 상품 등록 및 이미지 업로드
-- 실제 검색어 기반 상품 검색
-- WebSocket 기반 실시간 채팅
-- 카메라 촬영 및 이미지 저장
-- ARCore·ARKit 또는 WebXR 기반 실제 공간 인식
-- 거래 알림, 안전결제, 신고 기능
-- 상품별 찜 상태와 판매 내역 저장
+| 메서드 | 경로                     | 기능                |
+| ------ | ------------------------ | ------------------- |
+| POST   | `/api/email/send-code`   | 인증번호 발송       |
+| POST   | `/api/email/verify-code` | 인증번호 확인       |
+| POST   | `/api/auth/register`     | 회원가입            |
+| POST   | `/api/auth/login`        | 로그인 및 토큰 발급 |
+| POST   | `/api/posts`             | 게시물 등록         |
+| GET    | `/api/posts`             | 목록·검색·필터      |
+| GET    | `/api/posts/{post_id}`   | 상세 조회           |
+| PUT    | `/api/posts/{post_id}`   | 게시물 전체 수정    |
+| DELETE | `/api/posts/{post_id}`   | 게시물 삭제         |
 
-## 9. 참고 기술
-- **Dart**: Flutter 앱 개발 언어
-- **Flutter**: 크로스플랫폼 모바일 UI 프레임워크
-- **Material 3**: 앱 전역 UI 컴포넌트와 테마
-- **sensors_plus**: 가속도 센서 이벤트 수신
-- **CustomPainter**: 상품 일러스트와 AR 격자·조준선 렌더링
-- **StatefulWidget / setState**: 현재 데모의 로컬 상태 관리
+게시물 등록·수정·삭제에는 로그인 토큰이 필요합니다. 수정·삭제 시 서버에서 작성자 여부를 검사합니다.
+
+## 9. 확인한 기능 및 현재 제한
+
+### 확인 완료
+
+- 이메일 발송·인증 및 미인증 회원가입 차단
+- 앱 회원가입·로그인
+- 서버 재시작 후 회원정보 유지
+- 게시물 등록·조회·수정·삭제·검색
+- 서버 재시작 후 게시물 유지
+- Flutter 화면과 FastAPI 연동
+
+### 추가 확인 및 구현 예정
+
+- 다른 계정의 게시물 수정·삭제 차단 테스트
+- 실제 로그인 닉네임의 프로필 표시
+- 로그아웃 및 앱 재시작 후 로그인 유지
+- 사진 업로드 담당 기능 연결
+- AI 결함 탐지·추천가격 결과 연결
+- 실제 AR 공간 인식 및 3D 상품 배치
+- 서버 게시물과 채팅 기능 연결
+
+현재 로그인 정보는 앱 메모리에 보관하므로 앱을 완전히 재시작하면 다시 로그인해야 합니다. 회원정보와 게시물은 SQLite에 유지됩니다.
+
+## 10. 개발 방향
+
+기획서의 목표 흐름은 다음과 같습니다.
+
+상품 사진 촬영·업로드 → AI 결함 탐지 → 추천가격 제안  
+→ 구매자의 AR 배치 확인 → 거래
+
+현재 구현은 이 흐름의 기반이 되는 이메일 인증, 회원 관리, 게시판 및 앱·서버 연결에 해당합니다.
+
+사진 파일 업로드와 AI 모델 자체는 별도 담당 기능과 연동할 예정입니다. 실제 결제·실시간 채팅·공간 인식 AR은 아직 구현 완료 상태가 아닙니다.
 
 ## 라이선스
-본 프로젝트는 모바일 프로그래밍 학습 및 캡스톤 디자인 발표를 위한 프로젝트입니다. 외부 이미지·패키지·서비스를 실제 배포에 사용할 경우 각 라이선스와 사용 조건을 별도로 확인해야 합니다.
+
+모바일프로그래밍 학습 및 팀 프로젝트 목적으로 제작했습니다. 외부 패키지·이미지·모델·서비스 사용 시 해당 라이선스와 이용 조건을 확인합니다.

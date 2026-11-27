@@ -11,3 +11,7 @@ env/
 # Python Cache
 __pycache__/
 *.py[cod]
+
+# 로컬 SQLite 데이터
+marketplace.db
+marketplace.db-*
