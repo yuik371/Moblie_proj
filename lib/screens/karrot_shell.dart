@@ -7,14 +7,16 @@ import 'ar_preview_view.dart';
 import 'article_view.dart';
 import 'chat_room_view.dart';
 import 'chat_view.dart';
-import 'home_view.dart';
 import 'login_view.dart';
 import 'otp_view.dart';
 import 'profile_view.dart';
 import 'region_view.dart';
-import 'search_view.dart';
 import 'settings_view.dart';
 import 'write_view.dart';
+import 'server_posts_view.dart';
+import 'server_search_view.dart';
+import '../services/auth_session.dart';
+import 'server_login_view.dart';
 
 // 앱의 모든 화면과 하단 네비게이션을 연결하는 화면 셸입니다.
 class KarrotShell extends StatefulWidget {
@@ -26,6 +28,26 @@ class KarrotShell extends StatefulWidget {
 
 class _KarrotShellState extends State<KarrotShell> {
   final appState = AppState();
+
+    Future<void> openServerLogin() async {
+    final success = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => const ServerLoginView(),
+      ),
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      appState.loggedIn = AuthSession.isLoggedIn;
+    });
+
+    if (success == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('로그인되었습니다.')),
+      );
+    }
+  }
 
   // 상품 인덱스를 저장한 뒤 상세 화면으로 이동합니다.
   void openArticle(int index) {
@@ -42,9 +64,12 @@ class _KarrotShellState extends State<KarrotShell> {
     setState(() => appState.openScreen(next));
   }
 
-  // 상품 작성 완료 후 목록에 상품을 추가하고 홈으로 돌아갑니다.
+    // 실제 등록은 WriteView에서 처리하고, 여기서는 홈으로 이동합니다.
   void publishListing() {
-    setState(appState.publishListing);
+    setState(() {
+      appState.selectedTab = 0;
+      appState.screen = AppScreen.home;
+    });
   }
 
   // Android 시스템 뒤로 가기 버튼의 화면 이동을 처리합니다.
@@ -57,20 +82,15 @@ class _KarrotShellState extends State<KarrotShell> {
   // 현재 상태에 맞는 실제 화면 위젯을 선택합니다.
   Widget buildScreen() {
     switch (appState.screen) {
-      case AppScreen.home:
+                  case AppScreen.home:
         return buildMainScaffold(
           tab: 0,
-          body: HomeView(
-            listings: appState.listings,
-            onRegion: () => openScreen(AppScreen.region),
-            onSearch: () => openScreen(AppScreen.search),
-            onListing: openArticle,
-          ),
+          body: const ServerPostsView(),
         );
       case AppScreen.search:
         return buildMainScaffold(
           tab: 1,
-          body: SearchView(listings: appState.listings, onListing: openArticle),
+          body: const ServerSearchView(),
         );
       case AppScreen.chat:
         return buildMainScaffold(
@@ -82,7 +102,7 @@ class _KarrotShellState extends State<KarrotShell> {
           tab: 3,
           body: ProfileView(
             loggedIn: appState.loggedIn,
-            onLogin: () => openScreen(AppScreen.login),
+            onLogin: openServerLogin,
             onSettings: () => openScreen(AppScreen.settings),
           ),
         );

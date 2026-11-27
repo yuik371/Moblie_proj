@@ -1,58 +1,162 @@
 import 'package:flutter/material.dart';
 
-import '../config/app_theme.dart';
-import '../widgets/form_row.dart';
+import '../services/auth_session.dart';
+import '../services/post_service.dart';
 
-// 사진·상품 정보·설명을 입력하고 임시 상품을 등록하는 화면입니다.
-class WriteView extends StatelessWidget {
-  const WriteView({required this.onBack, required this.onPublish, super.key});
+class WriteView extends StatefulWidget {
+  const WriteView({
+    required this.onBack,
+    required this.onPublish,
+    super.key,
+  });
 
   final VoidCallback onBack;
   final VoidCallback onPublish;
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        // 작성 취소 후 홈으로 돌아가는 버튼입니다.
-        leading: IconButton(onPressed: onBack, icon: const Icon(Icons.arrow_back)),
-        title: const Text('내 물건 팔기', style: TextStyle(fontWeight: FontWeight.w700)),
+  State<WriteView> createState() => _WriteViewState();
+}
+
+class _WriteViewState extends State<WriteView> {
+  final _formKey = GlobalKey<FormState>();
+
+  final _title = TextEditingController();
+  final _description = TextEditingController();
+  final _category = TextEditingController();
+  final _region = TextEditingController();
+
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    for (final controller in [
+      _title,
+      _description,
+      _category,
+      _region,
+    ]) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_saving) return;
+
+    final token = AuthSession.accessToken;
+
+    // 나의 당근에서 로그인한 정보를 사용합니다.
+    if (!AuthSession.isLoggedIn || token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('나의 당근에서 먼저 로그인해주세요.'),
+        ),
+      );
+      return;
+    }
+
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _saving = true);
+
+    try {
+      await PostService.createPost(
+        token: token,
+        title: _title.text,
+        description: _description.text,
+        category: _category.text,
+        region: _region.text,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('상품이 등록되었습니다.')),
+      );
+
+      widget.onPublish();
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('등록 실패: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  Widget _field(
+    TextEditingController controller,
+    String label, {
+    required int maxLength,
+    int maxLines = 1,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: TextFormField(
+        controller: controller,
+        enabled: !_saving,
+        maxLength: maxLength,
+        maxLines: maxLines,
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+        ),
+        validator: (value) {
+          if (value == null || value.trim().isEmpty) {
+            return '$label 항목을 입력해주세요.';
+          }
+          return null;
+        },
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // 사진 선택 기능을 연결할 자리입니다.
-          Container(
-            width: 96,
-            height: 96,
-            decoration: BoxDecoration(color: const Color(0xFFFFF1E9), borderRadius: BorderRadius.circular(11)),
-            child: const Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [Icon(Icons.camera_alt_outlined, color: orange), SizedBox(height: 6), Text('사진 추가', style: TextStyle(color: orange, fontWeight: FontWeight.w700))],
-            ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_saving,
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            onPressed: _saving ? null : widget.onBack,
+            icon: const Icon(Icons.arrow_back),
           ),
-          const SizedBox(height: 22),
-          const FormRow(label: '제목', hint: '상품 제목을 입력해주세요'),
-          const FormRow(label: '가격', hint: '가격을 입력해주세요'),
-          const FormRow(label: '카테고리', hint: '카테고리를 선택해주세요'),
-          const SizedBox(height: 8),
-          Container(
-            height: 125,
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(11)),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [Text('상품 설명', style: TextStyle(fontWeight: FontWeight.w700, color: ink)), SizedBox(height: 22), Text('상품의 상태와 거래 정보를 적어주세요', style: TextStyle(color: muted))],
-            ),
+          title: const Text('내 물건 팔기'),
+        ),
+        body: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              _field(_title, '상품 제목', maxLength: 100),
+              _field(
+                _description,
+                '상품 설명',
+                maxLength: 5000,
+                maxLines: 5,
+              ),
+              _field(_category, '카테고리', maxLength: 50),
+              _field(_region, '거래 지역', maxLength: 100),
+              const Text(
+                '사진 업로드와 AI 가격 측정은 추후 연결됩니다.\n'
+                '현재는 사진 없이 가격 미정으로 등록됩니다.',
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: _saving ? null : _submit,
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF6F0F),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: Text(_saving ? '등록 중...' : '작성 완료'),
+              ),
+            ],
           ),
-          const SizedBox(height: 35),
-          // 작성한 상품을 목록에 추가하고 홈으로 이동하는 버튼입니다.
-          FilledButton(
-            onPressed: onPublish,
-            style: FilledButton.styleFrom(backgroundColor: orange, padding: const EdgeInsets.symmetric(vertical: 16)),
-            child: const Text('작성 완료', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-          ),
-        ],
+        ),
       ),
     );
   }
